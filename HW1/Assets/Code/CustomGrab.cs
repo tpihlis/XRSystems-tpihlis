@@ -1,121 +1,224 @@
-using System.Collections;
-using System.Collections.Generic;
+// CustomGrab.cs
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class CustomGrab : MonoBehaviour
 {
-    // This script should be attached to both controller objects in the scene
-    // Make sure to define the input in the editor (LeftHand/Grip and RightHand/Grip recommended respectively)
-    
-    [Header("Input & Settings")]
+    [Header("Input")]
     public InputActionReference action;
-    public bool enableDoubleRotation = false; // extra credit
 
-    [Header("State")]
-    public List<Transform> nearObjects = new List<Transform>();
-    public Transform grabbedObject = null;
-    
-    private CustomGrab otherHand = null;
-    
-    // keep track of where the controller was in the last frame
-    private Vector3 lastPos;
-    private Quaternion lastRot;
+    [Header("Grab")]
+    public float grabRadius = 0.1f;
+    public LayerMask grabLayer;
+    public Transform handVisualModel; // optional model that snaps to handle while grabbing
 
-    private void Start()
+    [Header("Reel")]
+    public FishingLine fishingLine;
+    public float linePerRevolution = 0.5f; // meters per full rotation
+
+    // state
+    private GrabHandle currentHandle;
+    private Transform grabbedObject;
+    private Rigidbody grabbedRb;
+
+    // visuals restore
+    private Vector3 originalVisualLocalPos;
+    private Quaternion originalVisualLocalRot;
+
+    // velocity estimation (for release)
+    private Vector3 lastHandPos;
+    private Quaternion lastHandRot;
+    private Vector3 estimatedLinearVelocity;
+    private Vector3 estimatedAngularVelocity;
+
+    // reel state
+    private float lastReelAngle;
+
+    // non-alloc overlap buffer
+    private readonly Collider[] overlapResults = new Collider[8];
+
+    private void OnEnable()
     {
         if (action != null) action.action.Enable();
-
-        // storing the starting position and rotation so the object doesn't 
-        // teleport or "jump" the very first second I grab it.
-        lastPos = transform.position;
-        lastRot = transform.rotation;
-
-        // Find the other hand
-        foreach(CustomGrab c in transform.parent.GetComponentsInChildren<CustomGrab>())
-        {
-            if (c != this) otherHand = c;
-        }
     }
 
-    void Update()
+    private void OnDisable()
     {
-        // checking if the grip button is actually down
+        if (action != null) action.action.Disable();
+    }
+
+    private void Update()
+    {
         bool isPressed = action != null && action.action.IsPressed();
 
-        // GRABBING LOGIC
-        if (isPressed && grabbedObject == null)
+        if (isPressed && currentHandle == null)
         {
-            // if touching something, grab that first. 
-            // if not, check if the other hand is holding something so we can do the 2-handed grab.
-            if (nearObjects.Count > 0)
-            {
-                grabbedObject = nearObjects[0];
-            }
-            else if (otherHand != null && otherHand.grabbedObject != null)
-            {
-                grabbedObject = otherHand.grabbedObject;
-            }
+            var target = GetClosestHandle();
+            if (target != null) Grab(target);
         }
-        else if (!isPressed && grabbedObject != null)
+        else if (!isPressed && currentHandle != null)
         {
-            // let go if the button isn't pressed
-            grabbedObject = null;
+            Release();
         }
 
-        // MOVEMENT LOGIC 
-        if (grabbedObject != null)
+        if (currentHandle != null)
         {
-            // calculate how much the controller moved and rotated since the last frame
-            Vector3 deltaPos = transform.position - lastPos;
-            
-            // using inverse here because the order of operations matters for Quaternions
-            Quaternion deltaRot = transform.rotation * Quaternion.Inverse(lastRot);
+            EstimateVelocity();
 
-            // make the rotation twice as fast if the toggle is on
-            if (enableDoubleRotation)
-            {
-                float angle;
-                Vector3 axis;
-                // nreak it down into axis/angle so can just multiply the angle by 2
-                deltaRot.ToAngleAxis(out angle, out axis);
-                deltaRot = Quaternion.AngleAxis(angle * 2f, axis);
-            }
-
-            // PIVOTING
-            // need to rotate the offset vector between the hand and the object
-            Vector3 vectorToObj = grabbedObject.position - transform.position;
-            Vector3 rotatedVector = deltaRot * vectorToObj;
-            
-            // move the object to the new rotated offset and then add the hand's move 
-            grabbedObject.position = transform.position + rotatedVector + deltaPos;
-
-            // OBJECT ROTATION
-            // apply the hand's rotation change to the object's current rotation
-            grabbedObject.rotation = deltaRot * grabbedObject.rotation;
-        }
-
-        // Should save the current position and rotation here
-        // saving these at the very end so they are ready for the next frame's math
-        lastPos = transform.position;
-        lastRot = transform.rotation;
-    }
-
-    private void OnTriggerEnter(Collider other)
-    {
-        // Make sure to tag grabbable objects with the "grabbable" tag
-        // checking tag
-        if (other.CompareTag("Grabbable") || other.tag.ToLower() == "grabbable")
-        {
-            if (!nearObjects.Contains(other.transform))
-                nearObjects.Add(other.transform);
+            if (currentHandle.isReel) UpdateReel();
+            else UpdateRod();
         }
     }
 
-    private void OnTriggerExit(Collider other)
+    private void EstimateVelocity()
     {
-        // remove it from the list when moved hand away
-        if (nearObjects.Contains(other.transform))
-            nearObjects.Remove(other.transform);
+        float dt = Mathf.Max(Time.deltaTime, 1e-6f);
+        estimatedLinearVelocity = (transform.position - lastHandPos) / dt;
+
+        Quaternion delta = transform.rotation * Quaternion.Inverse(lastHandRot);
+        delta.ToAngleAxis(out float angleDeg, out Vector3 axis);
+        if (angleDeg > 180f) angleDeg -= 360f;
+        float angleRad = angleDeg * Mathf.Deg2Rad;
+        estimatedAngularVelocity = axis.sqrMagnitude > 0f ? axis.normalized * (angleRad / dt) : Vector3.zero;
+
+        lastHandPos = transform.position;
+        lastHandRot = transform.rotation;
+    }
+
+    private void Grab(GrabHandle handle)
+    {
+        currentHandle = handle;
+        grabbedObject = handle.objectToMove;
+        grabbedRb = grabbedObject ? grabbedObject.GetComponent<Rigidbody>() : null;
+
+        // Save visual transform so we can restore on release
+        if (handVisualModel)
+        {
+            originalVisualLocalPos = handVisualModel.localPosition;
+            originalVisualLocalRot = handVisualModel.localRotation;
+        }
+
+        // Initialize velocity sampling
+        lastHandPos = transform.position;
+        lastHandRot = transform.rotation;
+
+        // If grabbing a physical object (not a reel), make it kinematic while held
+        if (grabbedRb != null && !currentHandle.isReel)
+        {
+            grabbedRb.isKinematic = true;
+        }
+
+        // If starting a reel, set initial angle
+        if (currentHandle.isReel && grabbedObject != null)
+        {
+            lastReelAngle = ComputeDiscAngle(grabbedObject);
+        }
+
+        // Move visual to the handle immediately
+        if (handVisualModel)
+        {
+            handVisualModel.position = currentHandle.transform.position;
+            handVisualModel.rotation = currentHandle.transform.rotation * Quaternion.Euler(currentHandle.snapRotationOffset);
+        }
+    }
+
+    private void Release()
+    {
+        if (grabbedRb != null && !currentHandle.isReel)
+        {
+            grabbedRb.isKinematic = false;
+            grabbedRb.linearVelocity = estimatedLinearVelocity;
+            grabbedRb.angularVelocity = estimatedAngularVelocity;
+        }
+
+        if (handVisualModel)
+        {
+            handVisualModel.localPosition = originalVisualLocalPos;
+            handVisualModel.localRotation = originalVisualLocalRot;
+        }
+
+        currentHandle = null;
+        grabbedObject = null;
+        grabbedRb = null;
+    }
+
+    private GrabHandle GetClosestHandle()
+    {
+        int count = Physics.OverlapSphereNonAlloc(transform.position, grabRadius, overlapResults, grabLayer, QueryTriggerInteraction.Ignore);
+        GrabHandle closest = null;
+        float minDist = float.MaxValue;
+
+        for (int i = 0; i < count; i++)
+        {
+            var h = overlapResults[i].GetComponent<GrabHandle>();
+            if (h == null) continue;
+            float d = Vector3.Distance(transform.position, h.transform.position);
+            if (d < minDist)
+            {
+                minDist = d;
+                closest = h;
+            }
+        }
+
+        return closest;
+    }
+
+    private void UpdateRod()
+    {
+        if (grabbedObject == null || currentHandle == null) return;
+
+        // Match rotation so handle orientation aligns with controller
+        grabbedObject.rotation = transform.rotation * Quaternion.Inverse(currentHandle.transform.localRotation);
+
+        // Compute local handle point and match object position so handle sits at controller
+        Vector3 handleLocalPos = grabbedObject.InverseTransformPoint(currentHandle.transform.position);
+        grabbedObject.position = transform.position - (grabbedObject.rotation * handleLocalPos);
+
+        if (handVisualModel)
+        {
+            handVisualModel.position = currentHandle.transform.position;
+            handVisualModel.rotation = currentHandle.transform.rotation * Quaternion.Euler(currentHandle.snapRotationOffset);
+        }
+    }
+
+    private void UpdateReel()
+    {
+        if (currentHandle == null || grabbedObject == null) return;
+
+        float angle = ComputeDiscAngle(grabbedObject);
+
+        // rotate disc to face hand direction (local Y rotation)
+        grabbedObject.localRotation = Quaternion.Euler(0f, angle, 0f);
+
+        if (handVisualModel)
+        {
+            handVisualModel.position = currentHandle.transform.position;
+            handVisualModel.rotation = currentHandle.transform.rotation * Quaternion.Euler(currentHandle.snapRotationOffset);
+        }
+
+        float deltaAngle = Mathf.DeltaAngle(lastReelAngle, angle);
+        lastReelAngle = angle;
+
+        float deltaLine = (deltaAngle / 360f) * linePerRevolution;
+        if (fishingLine != null && Mathf.Abs(deltaLine) > Mathf.Epsilon)
+        {
+            fishingLine.AddLineLength(deltaLine);
+        }
+    }
+
+    private float ComputeDiscAngle(Transform disc)
+    {
+        // compute angle of vector from disc to hand in disc's parent local space
+        if (disc.parent == null) return disc.localEulerAngles.y;
+        Vector3 dir = transform.position - disc.position;
+        Vector3 localDir = disc.parent.InverseTransformDirection(dir);
+        float angle = Mathf.Atan2(localDir.x, localDir.z) * Mathf.Rad2Deg;
+        return angle;
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, grabRadius);
     }
 }

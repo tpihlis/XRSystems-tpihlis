@@ -10,12 +10,12 @@ TagManager:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - Lens
+  - Grabbable
   - Water
   - UI
-  - Hidden
-  - Player
-  - FullHidden
+  - 
+  - 
+  - 
   - 
   - 
   - 
