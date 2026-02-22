@@ -3,368 +3,258 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 
-/// <summary>
-/// Robust LureBiteController: handles pending spawns, socket acceptance timeouts,
-/// and clears stale state so bites keep functioning even if XR socket doesn't respond.
-/// </summary>
 [RequireComponent(typeof(Collider))]
 public class LureBiteController : MonoBehaviour
 {
     [System.Serializable]
     public class FishEntry
     {
+        [Tooltip("Fish prefab (must have XRGrabInteractable, Rigidbody, Collider)")]
         public GameObject prefab;
+
+        [Tooltip("Relative spawn weight (higher = more common)")]
         public float weight = 1f;
+
+        [Tooltip("Random scale multiplier range")]
         public Vector2 sizeRange = new Vector2(0.8f, 1.3f);
     }
 
+    // ================= REFERENCES =================
     [Header("References")]
-    public Transform fishSocket;                 // usually lure/socket
-    public UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor socketInteractor;  // socket component on the socket object
-    public LureController lureController;        // your existing lure script
+    public UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor fishSocket;
+    public LureController lureController;
 
+    // ================= FISH SETTINGS =================
     [Header("Fish Pool")]
     public List<FishEntry> fishPool = new List<FishEntry>();
 
+    // ================= BITE SETTINGS =================
     [Header("Bite Settings")]
     [Range(0f, 1f)] public float biteChance = 0.25f;
-    public Vector2 biteCheckInterval = new Vector2(2f, 6f);
+    public Vector2 biteCheckInterval = new Vector2(1f, 5f);
+
+    // ================= SPAWN SAFETY =================
+    [Header("Spawn Safety")]
+    public float minScaleMultiplier = 0.3f;
+    public float socketAcceptTimeout = 0.25f;
+
+    // ================= WATER =================
+    [Header("Water")]
     public string waterTag = "Water";
-    [Tooltip("Seconds to wait for the socket to accept a spawned fish before giving up.")]
-    public float pendingAcceptTimeout = 3.0f;
 
+    // ================= DEBUG =================
     [Header("Debug")]
-    public bool debugLogs = true;
+    public bool debugLogs = false;
 
-    // runtime state
-    private GameObject currentFish = null;   // a fish that the socket accepted and is hooked (or sitting in socket)
-    private GameObject pendingFish = null;   // a freshly spawned fish waiting for socket to accept
-    private Coroutine pendingTimeoutRoutine = null;
+    // ================= RUNTIME =================
+    GameObject currentFish;
+    GameObject pendingFish;
+    Coroutine biteRoutine;
 
-    private bool inWater = false;
-    private Coroutine biteRoutine = null;
+    int waterOverlapCount = 0;
+
+    bool IsInWater => waterOverlapCount > 0;
+
+    // ================= UNITY =================
 
     void Awake()
     {
-        // Auto-assign helpful references if user forgot
-        if (lureController == null)
-        {
+        if (!fishSocket)
+            fishSocket = GetComponentInChildren<UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor>();
+
+        if (!lureController)
             lureController = GetComponent<LureController>();
-            if (debugLogs) Debug.Log("[LureBite] Auto-assigned LureController: " + (lureController != null));
-        }
 
-        if (fishSocket == null)
+        if (fishSocket)
         {
-            Transform found = transform.Find("socket");
-            if (found != null) fishSocket = found;
-            if (debugLogs) Debug.Log("[LureBite] fishSocket assigned? " + (fishSocket != null));
-        }
-
-        if (socketInteractor == null && fishSocket != null)
-        {
-            socketInteractor = fishSocket.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor>();
-            if (debugLogs) Debug.Log("[LureBite] socketInteractor auto-assigned? " + (socketInteractor != null));
-        }
-
-        if (socketInteractor != null)
-        {
-            socketInteractor.selectEntered.AddListener(OnSocketSelectEntered);
-            socketInteractor.selectExited.AddListener(OnSocketSelectExited);
-            if (debugLogs) Debug.Log("[LureBite] Subscribed to socket events.");
-        }
-        else if (debugLogs)
-        {
-            Debug.LogWarning("[LureBite] socketInteractor is null - socket events will not fire.");
+            fishSocket.selectEntered.AddListener(OnSocketSelectEntered);
+            fishSocket.selectExited.AddListener(OnSocketSelectExited);
         }
     }
 
     void OnDestroy()
     {
-        if (socketInteractor != null)
+        if (fishSocket)
         {
-            socketInteractor.selectEntered.RemoveListener(OnSocketSelectEntered);
-            socketInteractor.selectExited.RemoveListener(OnSocketSelectExited);
+            fishSocket.selectEntered.RemoveListener(OnSocketSelectEntered);
+            fishSocket.selectExited.RemoveListener(OnSocketSelectExited);
         }
     }
+
+    // ================= WATER TRIGGERS =================
 
     void OnTriggerEnter(Collider other)
     {
         if (!other.CompareTag(waterTag)) return;
-        if (debugLogs) Debug.Log("[LureBite] Entered water.");
-        inWater = true;
-        if (biteRoutine == null) biteRoutine = StartCoroutine(BiteLoop());
+
+        waterOverlapCount++;
+
+        if (waterOverlapCount == 1)
+        {
+            if (debugLogs) Debug.Log("[LureBite] Entered water.");
+            biteRoutine ??= StartCoroutine(BiteLoop());
+        }
     }
 
     void OnTriggerExit(Collider other)
     {
         if (!other.CompareTag(waterTag)) return;
-        if (debugLogs) Debug.Log("[LureBite] Exited water.");
-        inWater = false;
-        if (biteRoutine != null)
+
+        waterOverlapCount = Mathf.Max(0, waterOverlapCount - 1);
+
+        if (waterOverlapCount == 0)
         {
-            StopCoroutine(biteRoutine);
-            biteRoutine = null;
+            if (debugLogs) Debug.Log("[LureBite] Exited water.");
+            if (biteRoutine != null)
+            {
+                StopCoroutine(biteRoutine);
+                biteRoutine = null;
+            }
         }
     }
+
+    // ================= MAIN LOOP =================
 
     IEnumerator BiteLoop()
     {
-        if (debugLogs) Debug.Log("[LureBite] BiteLoop started.");
-        while (inWater)
+        yield return new WaitForSeconds(0.25f);
+
+        while (IsInWater)
         {
-            // random wait between checks
+            // Pause while fish exists or is pending
+            yield return new WaitUntil(() => currentFish == null && pendingFish == null);
+
             float wait = Random.Range(biteCheckInterval.x, biteCheckInterval.y);
-            if (debugLogs) Debug.Log($"[LureBite] Waiting {wait:F2}s for next check.");
             yield return new WaitForSeconds(wait);
 
-            // Clean stale currentFish if destroyed or inactive
-            if (currentFish == null)
-            {
-                // nothing to do, but ensure hook state is consistent
-                if (lureController != null && lureController.hooked)
-                {
-                    if (debugLogs) Debug.Log("[LureBite] Hooked reported but no currentFish -> releasing hook.");
-                    lureController.ReleaseHook();
-                }
-            }
-            else
-            {
-                // if the object exists but got deactivated in scene, treat as gone
-                if (!currentFish.activeInHierarchy)
-                {
-                    if (debugLogs) Debug.Log("[LureBite] currentFish not active -> clearing.");
-                    currentFish = null;
-                    if (lureController != null && lureController.hooked) lureController.ReleaseHook();
-                }
-            }
+            if (!IsInWater) yield break;
 
-            // If there is already a fish accepted or pending, skip spawning
-            if (currentFish != null)
-            {
-                if (debugLogs) Debug.Log("[LureBite] Skipping check: currentFish present.");
+            if (Random.value > biteChance)
                 continue;
-            }
-            if (pendingFish != null)
-            {
-                if (debugLogs) Debug.Log("[LureBite] Skipping check: pendingFish awaiting socket.");
-                continue;
-            }
-            if (lureController != null && lureController.hooked)
-            {
-                if (debugLogs) Debug.Log("[LureBite] Skipping check: lureController reports hooked.");
-                continue;
-            }
 
-            // bite roll
-            float roll = Random.value;
-            if (debugLogs) Debug.Log($"[LureBite] Bite roll = {roll:F3} (need <= {biteChance:F3})");
-            if (roll <= biteChance)
-            {
-                if (debugLogs) Debug.Log("[LureBite] Bite succeeded -> spawning fish.");
-                SpawnFishIntoSocket();
-            }
-            else
-            {
-                if (debugLogs) Debug.Log("[LureBite] Bite failed.");
-            }
+            SpawnFishFromPool();
         }
-        if (debugLogs) Debug.Log("[LureBite] BiteLoop ended.");
+
+        biteRoutine = null;
     }
 
-    // Public test helper so you can force spawn from Inspector
-    [ContextMenu("Force Spawn Fish")]
-    public void ForceSpawnContext() => SpawnFishIntoSocket();
+    // ================= SPAWNING =================
 
-    public void SpawnFishIntoSocket()
+    void SpawnFishFromPool()
     {
-        // Validate
-        if (fishPool == null || fishPool.Count == 0)
-        {
-            Debug.LogWarning("[LureBite] fishPool empty - cannot spawn.");
-            return;
-        }
-        if (socketInteractor == null)
-        {
-            Debug.LogWarning("[LureBite] socketInteractor null - cannot auto-insert fish.");
-            return;
-        }
-        if (pendingFish != null)
-        {
-            Debug.LogWarning("[LureBite] A pending fish already exists. Wait for it to be accepted or timeout.");
-            return;
-        }
+        FishEntry entry = PickWeightedFish();
+        if (entry == null || entry.prefab == null) return;
 
-        // choose fish
-        FishEntry chosen = PickWeightedFish();
-        if (chosen == null || chosen.prefab == null)
-        {
-            Debug.LogWarning("[LureBite] No valid fish chosen.");
-            return;
-        }
+        Vector3 spawnPos = fishSocket.transform.position + Vector3.up * 0.02f;
+        Quaternion spawnRot = fishSocket.transform.rotation;
 
-        // instantiate
-        GameObject fish = Instantiate(chosen.prefab);
-        if (debugLogs) Debug.Log("[LureBite] Instantiated " + chosen.prefab.name);
-
-        // size randomization
-        float scale = Random.Range(chosen.sizeRange.x, chosen.sizeRange.y);
-        fish.transform.localScale = Vector3.Scale(fish.transform.localScale, Vector3.one * scale);
-        if (debugLogs) Debug.Log($"[LureBite] Scaled fish by {scale:F2}");
-
-        // ensure Rigidbody
-        Rigidbody rb = fish.GetComponent<Rigidbody>();
-        if (rb == null)
-        {
-            rb = fish.AddComponent<Rigidbody>();
-            if (debugLogs) Debug.Log("[LureBite] Added Rigidbody to fish (prefab missing one).");
-        }
-        rb.isKinematic = false;
-        rb.mass = Mathf.Clamp(scale, 0.1f, 10f);
-
-        // ensure XRGrabInteractable
-        UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable grab = fish.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
-        if (grab == null)
-        {
-            Debug.LogWarning("[LureBite] Spawned fish missing XRGrabInteractable. Add it to prefab.");
-            Destroy(fish);
-            return;
-        }
-
-        // set pending and start timeout
+        GameObject fish = Instantiate(entry.prefab, spawnPos, spawnRot);
         pendingFish = fish;
-        if (pendingTimeoutRoutine != null) StopCoroutine(pendingTimeoutRoutine);
-        pendingTimeoutRoutine = StartCoroutine(PendingAcceptTimeout(pendingAcceptTimeout));
 
-        // Try to start manual interaction (modern API requires IXRSelectInteractable)
-        UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable selectInteract = grab as UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable;
-        if (selectInteract == null)
+        // Scale
+        float scale = Mathf.Max(Random.Range(entry.sizeRange.x, entry.sizeRange.y), minScaleMultiplier);
+        fish.transform.localScale *= scale;
+
+        // Rigidbody
+        Rigidbody rb = fish.GetComponent<Rigidbody>();
+        if (!rb) rb = fish.AddComponent<Rigidbody>();
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+
+        // Grab interactable
+        UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable grab = fish.GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
+        if (!grab)
         {
-            Debug.LogWarning("[LureBite] XRGrabInteractable does not implement IXRSelectInteractable - cannot StartManualInteraction.");
-            // Clean up
-            CancelPendingSpawn();
+            Destroy(fish);
+            pendingFish = null;
             return;
         }
 
-        // Attempt to have the socket accept the fish.
-        try
+        // Start socket interaction
+        UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable ixr = grab as UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable;
+        if (ixr == null)
         {
-            socketInteractor.StartManualInteraction(selectInteract);
-            if (debugLogs) Debug.Log("[LureBite] Called StartManualInteraction on socket.");
+            CancelPending();
+            return;
         }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning("[LureBite] StartManualInteraction threw: " + ex.Message);
-            CancelPendingSpawn();
-        }
+
+        fishSocket.StartManualInteraction(ixr);
+        StartCoroutine(ConfirmSocketAccepted(socketAcceptTimeout));
     }
 
-    // Waits for socket to accept. If nothing happens, clean up pending fish.
-    IEnumerator PendingAcceptTimeout(float seconds)
+    IEnumerator ConfirmSocketAccepted(float timeout)
     {
         float t = 0f;
-        while (t < seconds)
+        while (t < timeout)
         {
-            if (pendingFish == null) yield break; // accepted or destroyed elsewhere
+            if (pendingFish == null) yield break;
+            if (fishSocket.hasSelection) yield break;
             t += Time.deltaTime;
             yield return null;
         }
 
-        if (debugLogs) Debug.LogWarning("[LureBite] Pending fish was not accepted by socket in time. Destroying pending fish.");
-        CancelPendingSpawn();
+        CancelPending();
     }
 
-    // Cancel pending spawn and destroy fish
-    private void CancelPendingSpawn()
+    void CancelPending()
     {
-        if (pendingTimeoutRoutine != null)
-        {
-            StopCoroutine(pendingTimeoutRoutine);
-            pendingTimeoutRoutine = null;
-        }
-        if (pendingFish != null)
-        {
-            try { Destroy(pendingFish); } catch { }
-            pendingFish = null;
-        }
+        if (pendingFish)
+            Destroy(pendingFish);
+        pendingFish = null;
     }
 
-    // Weighted pick
+    // ================= SOCKET EVENTS =================
+
+    void OnSocketSelectEntered(SelectEnterEventArgs args)
+    {
+        Component c = args.interactableObject as Component;
+        if (!c) return;
+
+        currentFish = c.gameObject;
+        pendingFish = null;
+
+        Rigidbody rb = currentFish.GetComponent<Rigidbody>();
+        if (rb && lureController)
+            lureController.HookOnto(rb);
+    }
+
+    void OnSocketSelectExited(SelectExitEventArgs args)
+    {
+        currentFish = null;
+        if (lureController && lureController.hooked)
+            lureController.ReleaseHook();
+    }
+
+    // ================= UTIL =================
+
     FishEntry PickWeightedFish()
     {
         float total = 0f;
-        foreach (var f in fishPool) total += Mathf.Max(0f, f.weight);
+        foreach (var f in fishPool)
+            total += Mathf.Max(0f, f.weight);
+
         if (total <= 0f) return null;
-        float r = Random.value * total;
+
+        float roll = Random.value * total;
         float acc = 0f;
+
         foreach (var f in fishPool)
         {
             acc += Mathf.Max(0f, f.weight);
-            if (r <= acc) return f;
+            if (roll <= acc) return f;
         }
+
         return fishPool[Random.Range(0, fishPool.Count)];
     }
 
-    // Called when socket accepts an item
-    void OnSocketSelectEntered(SelectEnterEventArgs args)
+    // ================= EDITOR =================
+
+    [ContextMenu("Force Spawn (in water only)")]
+    void ForceSpawn()
     {
-        if (debugLogs) Debug.Log("[LureBite] OnSocketSelectEntered fired.");
-
-        // Extract component/GameObject from the IXRSelectInteractable
-        UnityEngine.XR.Interaction.Toolkit.Interactables.IXRSelectInteractable ixr = args.interactableObject;
-        if (ixr == null)
-        {
-            if (debugLogs) Debug.LogWarning("[LureBite] selectEntered had null interactableObject.");
-            return;
-        }
-
-        Component comp = ixr as Component;
-        if (comp == null)
-        {
-            if (debugLogs) Debug.LogWarning("[LureBite] selectEntered interactable is not a Component.");
-            return;
-        }
-
-        GameObject go = comp.gameObject;
-
-        // If we have a pending fish and this is it, accept and clear pending
-        if (pendingFish != null && go == pendingFish)
-        {
-            if (debugLogs) Debug.Log("[LureBite] Socket accepted pending fish.");
-            currentFish = pendingFish;
-            pendingFish = null;
-            if (pendingTimeoutRoutine != null) { StopCoroutine(pendingTimeoutRoutine); pendingTimeoutRoutine = null; }
-        }
+        if (IsInWater)
+            SpawnFishFromPool();
         else
-        {
-            // If no pending fish matches, it's possible the user manually placed some other interactable into socket.
-            currentFish = go;
-            if (debugLogs) Debug.Log("[LureBite] Socket accepted an interactable that wasn't pending. Tracking it as currentFish.");
-        }
-
-        // Attach to lure via LureController
-        Rigidbody rb = go.GetComponent<Rigidbody>();
-        if (rb != null && lureController != null)
-        {
-            lureController.HookOnto(rb);
-            if (debugLogs) Debug.Log("[LureBite] Called lureController.HookOnto on " + go.name);
-        }
-        else
-        {
-            if (debugLogs) Debug.LogWarning("[LureBite] Could not HookOnto: missing Rigidbody or LureController.");
-        }
-    }
-
-    // Called when socket loses selection (fish removed)
-    void OnSocketSelectExited(SelectExitEventArgs args)
-    {
-        if (debugLogs) Debug.Log("[LureBite] OnSocketSelectExited fired.");
-
-        // clear current fish & release hook
-        currentFish = null;
-        if (lureController != null && lureController.hooked)
-        {
-            lureController.ReleaseHook();
-            if (debugLogs) Debug.Log("[LureBite] Called ReleaseHook due to socket exit.");
-        }
+            Debug.LogWarning("[LureBite] Cannot force spawn — not in water.");
     }
 }
