@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69644d1995a35444c9915447a18d7b8d, type: 3}
+  m_Name: PerchSO
+  m_EditorClassIdentifier: Assembly-CSharp::FishingSystem.FishSpeciesSO
+  speciesId: perch
+  displayName: Perch
+  prefab: {fileID: 8337150771291744307, guid: e1fed32316a534849baf2a2316efaa8c, type: 3}
+  sizeMin: 10
+  sizeMax: 25
+  sizeAverage: 16
+  ageMin: 0
+  ageMax: 4
+  optimalAge: 1.2
+  baseQualityNorm: 0.28
+  baseRarityNorm: 0.12
+  spawnWeight: 3
+  priceScale: 8
+  recommendedMass: 1
