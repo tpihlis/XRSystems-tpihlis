@@ -104,6 +104,7 @@ GameObject:
   - component: {fileID: 6523766746592560022}
   - component: {fileID: 579526139913081979}
   - component: {fileID: 537886940142259788}
+  - component: {fileID: 2090159331799316730}
   m_Layer: 6
   m_Name: Pike
   m_TagString: Fish
@@ -120,8 +121,8 @@ Transform:
   m_GameObject: {fileID: 4036989899771172683}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.55139, y: -0.0176, z: 1.1427}
-  m_LocalScale: {x: 2.41, y: 2.41, z: 2.41}
+  m_LocalPosition: {x: -4.97173, y: 0.99300003, z: 4.98312}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 7513971755373137513}
@@ -331,6 +332,18 @@ MonoBehaviour:
     specialTrait: 0
   isPending: 0
   originPool: {fileID: 0}
+--- !u!114 &2090159331799316730
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4036989899771172683}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a1495c00be1bdf4abb66ea14c2531ad, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FishingSystem.FishGrabInfo
 --- !u!1 &7646259598402732735
 GameObject:
   m_ObjectHideFlags: 0

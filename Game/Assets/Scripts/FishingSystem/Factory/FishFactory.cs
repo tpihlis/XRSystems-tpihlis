@@ -1,4 +1,3 @@
-// File: Assets/Scripts/FishingSystem/Factory/FishFactory.cs
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -129,7 +128,7 @@ namespace FishingSystem
             float sd = species.sizeMax * sizeSdFraction;
             float size = RNGService.TruncatedNormal(mean, sd, species.sizeMin, species.sizeMax);
 
-            float sizeMultiplier = 1f + (lure != null ? lure.sizeBonus : 0f) + (player != null ? player.StrengthBonusNorm * 0.1f : 0f);
+            float sizeMultiplier = 1f + (player != null ? player.StrengthBonusNorm * 0.1f : 0f);
             size *= sizeMultiplier;
             data.sizeCm = Mathf.Clamp(size, species.sizeMin, species.sizeMax);
 
@@ -148,35 +147,29 @@ namespace FishingSystem
             float wAge = 0.20f;
 
             float fishingFactor = (player != null ? player.FishingBonusNorm * 0.5f : 0f);
-            float gearQualityBoost = (player != null && player.equippedRod != null ? player.equippedRod.gearQualityBoost : 0f);
 
             data.qualityNorm = Mathf.Clamp01(
                 wSpecies * (species.baseQualityNorm) +
                 wSize * sizeScore +
                 wAge * ageScore +
-                fishingFactor +
-                gearQualityBoost +
-                (lure != null ? lure.qualityBonus : 0f)
+                fishingFactor
             );
 
             // rarity composition
             float wBaseRarity = 0.6f;
             float wSizeRarity = 0.4f;
             float luckFactor = (player != null ? player.LuckBonusNorm * 0.5f : 0f);
-            float gearRarityBoost = (player != null && player.equippedRod != null ? player.equippedRod.gearQualityBoost : 0f);
 
             float baseRarity = (species.baseRarityNorm);
             data.rarityNorm = Mathf.Clamp01(
                 wBaseRarity * baseRarity
                 + wSizeRarity * sizeScore
                 + luckFactor
-                + gearRarityBoost
-                + (lure != null ? lure.rarityBonus : 0f)
             );
 
             // small chance of special trait
             float traitBase = 0.01f;
-            float traitChance = traitBase + (player != null ? player.LuckBonusNorm * 0.02f : 0f) + (lure != null ? lure.rarityBonus * 0.05f : 0f);
+            float traitChance = traitBase + (player != null ? player.LuckBonusNorm * 0.02f : 0f);
             data.specialTrait = RNGService.Range(0f, 1f) < traitChance;
 
             // compute display values for convenience (1..10)

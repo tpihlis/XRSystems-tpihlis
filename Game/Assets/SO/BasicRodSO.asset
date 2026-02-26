@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FishingSystem.RodSO
   rodId: basicrod
   displayName: Basic Rod
+  physicalPrefab: {fileID: 7355600587091174860, guid: 8a00e01576ebad847996dc5e59bef53f, type: 3}
   icon: {fileID: 0}
   minFishing: 0
   minStrength: 0

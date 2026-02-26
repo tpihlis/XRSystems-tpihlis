@@ -1,4 +1,3 @@
-// File: DebugHUD.cs
 using UnityEngine;
 
 namespace FishingSystem

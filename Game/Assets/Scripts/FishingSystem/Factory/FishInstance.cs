@@ -1,6 +1,4 @@
-// File: Assets/Scripts/FishingSystem/Factory/FishInstance.cs
 using UnityEngine;
-
 
 namespace FishingSystem
 {
@@ -55,9 +53,15 @@ namespace FishingSystem
             var rb = GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                rb.isKinematic = true;
+                // If currently non-kinematic, zero velocities first (allowed).
+                if (!rb.isKinematic)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+
+                rb.isKinematic = true;   // pooled = kinematic
+                rb.useGravity = false;   // pooled = no gravity
             }
 
             // Reset grab properties to default - allow throwing by default when handed to player later

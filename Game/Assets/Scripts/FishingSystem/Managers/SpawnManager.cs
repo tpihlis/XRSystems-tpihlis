@@ -1,4 +1,3 @@
-// File: SpawnManager.cs
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -80,8 +79,8 @@ namespace FishingSystem
                 for (int i = 0; i < speciesPool.Count; i++)
                 {
                     var s = speciesPool[i];
-                    float w = Mathf.Max(0f, s.spawnWeight) * (1f + player.LuckBonusNorm * 0.1f);
-                    if (player.equippedLure != null) w *= (1f + player.equippedLure.spawnBias);
+                    // simplified: no lure-based spawn bias; only species spawnWeight and player luck affect spawn probability
+                    float w = Mathf.Max(0f, s.spawnWeight) * (1f + (player != null ? player.LuckBonusNorm * 0.1f : 0f));
                     weights.Add(w);
                     DebugLogger.VerboseLog("SpawnManager", $"Species {s.speciesId} baseWeight={s.spawnWeight} adjWeight={w}");
                 }
@@ -96,7 +95,7 @@ namespace FishingSystem
                 var species = speciesPool[idx];
                 DebugLogger.Log("SpawnManager", $"Selected species {species.speciesId} (idx {idx})");
 
-                var pending = factory.SpawnPendingFish(species, player.equippedLure, player, fishSocketTransform);
+                var pending = factory.SpawnPendingFish(species, player != null ? player.equippedLure : null, player, fishSocketTransform);
                 if (pending != null)
                 {
                     DebugLogger.Log("SpawnManager", $"Pending fish spawned: {pending.name}");

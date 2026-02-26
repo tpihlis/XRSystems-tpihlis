@@ -1,4 +1,3 @@
-// Assets/Scripts/FishingSystem/Factory/FishData.cs
 using UnityEngine;
 
 namespace FishingSystem
@@ -23,7 +22,7 @@ namespace FishingSystem
 
         public bool specialTrait = false;
 
-        // compute only the display fields — DO NOT compute price here (single source of truth: FishFactory)
+        // compute only the display fields 
         public void ComputeDisplayValues()
         {
             qualityDisplay = 1f + qualityNorm * 9f;

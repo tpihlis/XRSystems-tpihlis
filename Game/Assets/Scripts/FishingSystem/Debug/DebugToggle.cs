@@ -1,5 +1,5 @@
-// File: DebugToggle.cs
 using UnityEngine;
+
 
 namespace FishingSystem
 {

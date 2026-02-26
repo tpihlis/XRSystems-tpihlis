@@ -1,4 +1,3 @@
-// File: Assets/Scripts/FishingSystem/Testing/TestRunner.cs
 using System;
 using UnityEngine;
 

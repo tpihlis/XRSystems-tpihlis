@@ -1,4 +1,3 @@
-// File: SocketAttach.cs
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;

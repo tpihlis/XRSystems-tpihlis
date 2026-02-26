@@ -1,4 +1,3 @@
-// File: FishingLine.cs
 using UnityEngine;
 
 namespace FishingSystem

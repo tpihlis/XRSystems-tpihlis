@@ -1,4 +1,3 @@
-// File: RodSO.cs
 using UnityEngine;
 
 namespace FishingSystem
@@ -8,6 +7,11 @@ namespace FishingSystem
     {
         public string rodId;
         public string displayName;
+
+        // NEW: physical prefab for the rod (spawned in world)
+        [Tooltip("Prefab for the physical rod (optional). If set, GearSpawner will Instantiate this at start.")]
+        public GameObject physicalPrefab;
+
         public Sprite icon;
 
         [Header("Stat requirements")]

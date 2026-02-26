@@ -1,4 +1,3 @@
-// File: BeltFollow.cs
 using UnityEngine;
 
 namespace FishingSystem

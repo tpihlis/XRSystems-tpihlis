@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FishingSystem.LureSO
   lureId: basiclure
   displayName: Basic Lure
+  physicalPrefab: {fileID: 4437578640656736801, guid: 8e2e20e5c3aa3e144b0a658ba9269786, type: 3}
   icon: {fileID: 0}
   spawnBias: 0
   sizeBonus: 0

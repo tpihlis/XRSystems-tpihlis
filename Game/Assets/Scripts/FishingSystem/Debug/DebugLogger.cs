@@ -1,4 +1,3 @@
-// File: Assets/Scripts/FishingSystem/Core/DebugLogger.cs
 using System;
 using UnityEngine;
 

@@ -7,11 +7,10 @@ namespace FishingSystem
 {
     public class CatchManager : MonoBehaviour
     {
-        public float balanceFactor = 5f; // larger => closer to 50/50
+        public float balanceFactor = 5f; 
 
         /// <summary>
-        /// Simple asynchronous fight resolver. Returns success via onComplete callback.
-        /// Uses fish size relative to species.sizeMax as fish strength, compared to player's strength.
+        /// Unused code
         /// </summary>
         public IEnumerator ResolveFight(Rigidbody fishRb, FishData fishData, PlayerStats player, RodSO rod, Action<bool> onComplete)
         {
@@ -22,10 +21,8 @@ namespace FishingSystem
                 yield break;
             }
 
-            // fish strength: size fraction (0..1) * 10
             float fishStrength = (fishData.sizeCm / Mathf.Max(0.0001f, fishData.speciesSO.sizeMax)) * 10f;
 
-            // player effective strength (0..10)
             float playerEff = (player != null ? player.StrengthBonusNorm * 10f : 0f) + (rod != null ? rod.strengthBonus : 0f);
 
             float diff = playerEff - fishStrength;

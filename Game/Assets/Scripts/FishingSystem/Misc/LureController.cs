@@ -1,4 +1,3 @@
-// File: LureController.cs
 using System;
 using UnityEngine;
 

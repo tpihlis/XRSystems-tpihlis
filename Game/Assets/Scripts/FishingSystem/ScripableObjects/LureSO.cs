@@ -1,4 +1,3 @@
-// File: LureSO.cs
 using UnityEngine;
 
 namespace FishingSystem
@@ -8,6 +7,11 @@ namespace FishingSystem
     {
         public string lureId;
         public string displayName;
+
+        // NEW: physical prefab for the lure (spawned in world)
+        [Tooltip("Prefab for the physical lure (optional). If set, GearSpawner will Instantiate this at start.")]
+        public GameObject physicalPrefab;
+
         public Sprite icon;
 
         [Header("Spawn biases")]

@@ -1,4 +1,3 @@
-// File: Assets/Scripts/FishingSystem/Interaction/SocketInteractionHandler.cs
 using System.Collections;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
@@ -46,10 +45,16 @@ namespace FishingSystem
             if (fish == null) return;
             pending = fish;
 
-            // Make pending fish kinematic & not affected by gravity while waiting
+            // Make pending fish kinematic & not affected by gravity while waiting.
+            // Zero velocities only when allowed (i.e. body is non-kinematic).
             var rb = pending.GetComponent<Rigidbody>();
             if (rb != null)
             {
+                if (!rb.isKinematic)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
                 rb.isKinematic = true;
                 rb.useGravity = false;
             }
@@ -140,6 +145,11 @@ namespace FishingSystem
             var rb = pending.GetComponent<Rigidbody>();
             if (rb != null)
             {
+                if (!rb.isKinematic)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
                 rb.isKinematic = true;
                 rb.useGravity = false;
             }
@@ -177,6 +187,11 @@ namespace FishingSystem
                 var rb = pending.GetComponent<Rigidbody>();
                 if (rb != null)
                 {
+                    if (!rb.isKinematic)
+                    {
+                        rb.linearVelocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                    }
                     rb.isKinematic = true;
                     rb.useGravity = false;
                     // DO NOT set velocities on kinematic bodies (causes errors)
@@ -202,6 +217,11 @@ namespace FishingSystem
                 var rb2 = selected.GetComponent<Rigidbody>();
                 if (rb2 != null)
                 {
+                    if (!rb2.isKinematic)
+                    {
+                        rb2.linearVelocity = Vector3.zero;
+                        rb2.angularVelocity = Vector3.zero;
+                    }
                     rb2.isKinematic = true;
                     rb2.useGravity = false;
                 }
@@ -227,9 +247,9 @@ namespace FishingSystem
                 var rb = go.GetComponent<Rigidbody>();
                 if (rb != null)
                 {
+                    // do NOT set velocities here; XRInteractionToolkit will apply throw velocities itself.
                     rb.isKinematic = false;
                     rb.useGravity = true;
-                    // Do NOT set velocities here — XRInteractionToolkit will apply the throw velocities itself.
                 }
 
                 // Allow throw on detach now that it's non-kinematic

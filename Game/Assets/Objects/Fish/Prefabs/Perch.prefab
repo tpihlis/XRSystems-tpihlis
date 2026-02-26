@@ -226,6 +226,7 @@ GameObject:
   - component: {fileID: 9093828908645733142}
   - component: {fileID: 7871428680871807978}
   - component: {fileID: 6801148454090167392}
+  - component: {fileID: -8056266499069504478}
   m_Layer: 6
   m_Name: Perch
   m_TagString: Fish
@@ -453,3 +454,15 @@ MonoBehaviour:
     specialTrait: 0
   isPending: 0
   originPool: {fileID: 0}
+--- !u!114 &-8056266499069504478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8337150771291744307}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a1495c00be1bdf4abb66ea14c2531ad, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FishingSystem.FishGrabInfo
